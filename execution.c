@@ -1,5 +1,16 @@
-void execute_command(char **tokens)
-{
+#define DELIM "  \t\r\n\a"
+#define PIPE_DELIM "<>|"
+
+// ls -l | wc
+// ls -l    wc
+void execute_pipe(char * line){
+    char** tokens = string_split(line, PIPE_DELIM);
+    close(stdout); 
+    printf("piped");
+}
+
+void execute_regular(char* line){
+    char** tokens = string_split(line, DELIM);
     if (strcmp(tokens[0], "chdir") == 0)
     {
         //tokens 1 wil contain the path of the file to cd into
@@ -49,5 +60,16 @@ void execute_command(char **tokens)
             perror("Something went wrong forking the process.");
             exit(EXIT_FAILURE);
         }
+    }
+}
+
+void execute_command(char* line)
+{
+    //Line contains a pipe argument
+    if (strstr(line, PIPE_DELIM) != NULL){
+        execute_pipe(line);
+    }else{
+        // Regular command without pipes
+        execute_regular(line);
     }
 }
