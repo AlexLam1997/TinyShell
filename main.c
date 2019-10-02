@@ -94,7 +94,7 @@ char* get_a_line()
     nread = getline(&line, &bufferSize, stdin);
     if (nread < 0)
         exit(0);
-        
+
     return line;
 }
 
@@ -203,13 +203,17 @@ void execute_command(char *line)
     }
     else if (strcmp(tokens[0], "limit") == 0)
     {
-        struct rlimit rl;
-        getrlimit(RLIMIT_CPU, &rl);
-        printf("\n Default value is : %lld\n", (long long int)rl.rlim_cur);
-        rl.rlim_cur = atoi(tokens[1]);
-        setrlimit(RLIMIT_CPU, &rl);
-        getrlimit(RLIMIT_CPU, &rl);
-        printf("\n Default value now is : %lld\n", (long long int)rl.rlim_cur);
+        if (!tokens[1]){
+            printf("Invalid command: Please set a limit. \n");
+        }else{
+            struct rlimit rl;
+            getrlimit(RLIMIT_DATA, &rl);
+            printf("\n Default value is : %lld\n", (long long int)rl.rlim_cur);
+            rl.rlim_cur = atoi(tokens[1]);
+            setrlimit(RLIMIT_DATA, &rl);
+            getrlimit(RLIMIT_DATA, &rl);
+            printf("\n Default value now is : %lld\n", (long long int)rl.rlim_cur);
+        }
     }
     else
     {
