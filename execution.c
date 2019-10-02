@@ -1,16 +1,43 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include "shared.h"
 #define DELIM "  \t\r\n\a"
-#define PIPE_DELIM "<>|"
+#define PIPE_DELIM "|"
 
-// ls -l | wc
-// ls -l    wc
-void execute_pipe(char * line){
-    char** tokens = string_split(line, PIPE_DELIM);
-    close(stdout); 
-    printf("piped");
+typedef enum
+{
+    false,
+    true
+} bool;
+
+bool is_pipe(char *line)
+{
+    bool pipe = false;
+    int i = 0;
+    while (i < strlen(line) && !pipe)
+    {
+        pipe = strchr(PIPE_DELIM, line[i]) != NULL;
+        i++;
+    }
+    return pipe;
 }
 
-void execute_regular(char* line){
-    char** tokens = string_split(line, DELIM);
+void execute_command(char *line)
+{
+    char **tokens;
+    bool isPipe = is_pipe(line);
+    if(isPipe){
+        if (FIFO_NAME == NULL)
+        {
+            printf("Unable to use pipes, no FIFO provided. \n");
+            exit(EXIT_FAILURE);
+        }
+        tokens = string_split(line, PIPE_DELIM);
+    }else{
+        tokens = string_split(line, DELIM);
+    }
+
     if (strcmp(tokens[0], "chdir") == 0)
     {
         //tokens 1 wil contain the path of the file to cd into
@@ -32,44 +59,87 @@ void execute_regular(char* line){
     }
     else
     {
-        // fork curent process to exexute a command
+        // fork curent process to execute a command
         pid_t pid = fork();
+
+        if (pid < 0)
+        {
+            // Creation of the process failed
+            perror("Error while forking");
+            exit(EXIT_FAILURE);
+        }
+
         if (pid == 0)
         {
             //In the child
-            // if(execvp(tokens[0], tokens) == -1){
-            if (execvp(tokens[0], tokens) == -1)
-            {
-                // the Exec command isnt supposed to return if no error happened
-                perror("Invalid command");
-                exit(EXIT_FAILURE);
+            if(isPipe){
+                // Piping command
+                // Close the stdout, reroute to FIFO
+                close(1);
+                int fifo = open(FIFO_NAME, O_WRONLY);
+                dup2(fifo, 1);
+                if(fifo < 0){
+                    perror("Invalid command");
+                    exit(EXIT_FAILURE); 
+                }
+
+                // If this is a pipe command, then the tokens array has seperated the string using PIPE_DELIM
+                // Split the first command of the pipe again
+                char** pipe_tokens = string_split(tokens[0], DELIM);
+
+                // run the first command, the output has been redirected to the fifo
+                if (execvp(pipe_tokens[0], pipe_tokens) == -1)
+                {
+                    // the Exec command isnt supposed to return if no error happened
+                    perror("Invalid command");
+                    exit(EXIT_FAILURE);
+                }
+                close(fifo);
+            }else{
+                // there is no pipe operator in this command, the tokens array has seperated the string using DELIM
+                if (execvp(tokens[0], tokens) == -1)
+                {
+                    // the Exec command isnt supposed to return if no error happened
+                    perror("Invalid command");
+                    exit(EXIT_FAILURE);
+                }
             }
         }
         else if (pid > 0)
         {
             // In the parent
+            // Now for the 2nd process of the pipe
+            if(isPipe){
+                pid_t pid2 = fork();
+                if(pid2 == 0){
+                    // Pull from FIFO instead of stdin
+                    // Close the stdin, reroute to FIFO
+                    close(0);
+                    int fifo = open(FIFO_NAME, O_RDONLY);
+                    dup2(fifo, 0);
+                    // If this is a pipe command, then the tokens array has seperated the string using PIPE_DELIM
+                    // Split the first command of the pipe again
+                    char** pipe_tokens = string_split(tokens[1], DELIM);
+
+                    // run the first command, the output has been redirected to the fifo
+                    if (execvp(pipe_tokens[0], pipe_tokens) == -1)
+                    {
+                        // the Exec command isnt supposed to return if no error happened
+                        perror("Invalid command");
+                        exit(EXIT_FAILURE);
+                    }
+                    close(fifo);
+                }else if (pid2<0){
+                    perror("Error while forking");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            // wait for execution of task 1 to end before accepting another
             int status;
             do
             {
                 waitpid(pid, &status, WUNTRACED);
             } while (!WIFEXITED(status) && !WIFSIGNALED(status));
         }
-        else
-        {
-            // Creation of the process failed
-            perror("Something went wrong forking the process.");
-            exit(EXIT_FAILURE);
-        }
-    }
-}
-
-void execute_command(char* line)
-{
-    //Line contains a pipe argument
-    if (strstr(line, PIPE_DELIM) != NULL){
-        execute_pipe(line);
-    }else{
-        // Regular command without pipes
-        execute_regular(line);
     }
 }
