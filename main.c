@@ -92,7 +92,9 @@ char* get_a_line()
     // Getline allocates a buffer an assigns it to line if line is null, *bufferSize is updated with size of buffer.
     // it is the responsibility of the caller to free this buffer in this case.
     nread = getline(&line, &bufferSize, stdin);
-
+    if (nread < 0)
+        exit(0);
+        
     return line;
 }
 
