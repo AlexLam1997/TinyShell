@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "wait.h": "c",
-        "resource.h": "c",
-        "time.h": "c"
-    }
-}
